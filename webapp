@@ -1,0 +1,85 @@
+#!/bin/bash
+#Name   :       Script for Auto Deploying CSR, Admin & Branch Report thro Ansible
+#Author :       Sureshkumar H
+if [ -z ${1} ]
+   then
+    echo "No Input, hence exiting"
+   exit;
+else
+JVM_BASE=/opt/fis/`ls -ltr /opt/fis/ | grep -i $1 | awk -F ' ' '{print $9}'`
+if [ -f ${JVM_BASE}/logs/deployment.log ]
+then
+   >${JVM_BASE}/logs/deployment.log
+else
+   touch ${JVM_BASE}/logs/deployment.log
+fi
+if [ ! -d "{JVM_BASE}/temporary" ]
+   then
+    echo "Temporary Directory doesn't Exist" >> ${JVM_BASE}/logs/deployment.log
+    mkdir -p ${JVM_BASE}/temporary/
+        echo "Temporary Directory Created" >> ${JVM_BASE}/logs/deployment.log
+else
+    echo "Temporary Directory Exist, so using the directory" >> ${JVM_BASE}/logs/deployment.log
+	rm -rf ${JVM_BASE}/temporary/*
+fi
+TMP_DIR=${JVM_BASE}/temporary/
+mv -f /home/ansible/new_build/*war ${TMP_DIR}/
+WEBAPPS_PATH=${JVM_BASE}/webapps
+echo "Taking Backup of existing Build" >> ${JVM_BASE}/logs/deployment.log
+BKP=`ls /home/ansible/backup_builds | grep -i $1`
+BKP_DIR=/home/ansible/backup_builds/${BKP}
+if [ ! -d "${BKP_DIR}" ]
+   then
+    echo "${BKP_DIR} not exist" >> ${JVM_BASE}/logs/deployment.log
+    mkdir -p ${BKP_DIR}
+    echo "Directory Created" >> ${JVM_BASE}/logs/deployment.log
+else
+    echo "Directory Exist, hence clearing Backup Directory" >> ${JVM_BASE}/logs/deployment.log
+    rm -rf ${BKP_DIR}/*
+fi
+echo "Capturing JVM PID and Stopping the same" >> ${JVM_BASE}/logs/deployment.log
+PID=`ps -ef | grep -v grep | grep ${JVM_BASE} | awk '{print $2}'`
+echo "Stopping ${JVM_BASE}" >> ${JVM_BASE}/logs/deployment.log
+echo "" >> ${JVM_BASE}/logs/deployment.log
+if ps -p ${PID} > /dev/null
+then
+ kill -15 ${PID}
+ sleep 30
+fi
+echo "" >>${JVM_BASE}/logs/deployment.log
+echo "${JVM} has been stopped" >> ${JVM_BASE}/logs/deployment.log
+echo "Taking backup from WebApps" >> ${JVM_BASE}/logs/deployment.log
+for i in `ls ${WEBAPPS_PATH} | grep -i ${1}`
+do
+cd ${WEBAPPS_PATH}
+ls -d  $i
+mv -f $i ${BKP_DIR}
+done
+echo "Renaming default Build name according to our environment" >> ${JVM_BASE}/logs/deployment.log
+BLD_NAME=`ls ${BKP_DIR} | grep -v war`
+echo "" >> ${JVM_BASE}/logs/deployment.log
+echo ${BLD_NAME} >> ${JVM_BASE}/logs/deployment.log
+echo "" >> ${JVM_BASE}/logs/deployment.log
+cd ${TMP_DIR}
+mv -f *war ${BLD_NAME}.war
+mkdir ${BLD_NAME}
+unzip *war -d ${BLD_NAME}/ >> ${JVM_BASE}/logs/deployment.log
+echo "Unzipping completed" >> ${JVM_BASE}/logs/deployment.log
+echo "Replacing the Configuration File" >> ${JVM_BASE}/logs/deployment.log
+cp -pr ${BKP_DIR}/${BLD_NAME}/WEB-INF/configuration.properties ${TMP_DIR}/${BLD_NAME}/WEB-INF/configuration.properties
+mv -f ${TMP_DIR}/* ${WEBAPPS_PATH}/
+chmod -R 775 ${WEBAPPS_PATH}/
+echo "Clearing Work directory" >> ${JVM_BASE}/logs/deployment.log
+rm -rf ${JVM_BASE}/work/*
+#>${JVM_BASE}/logs/build.out
+echo "Creating new catalina out file" >> ${JVM_BASE}/logs/deployment.log
+mv -f ${JVM_BASE}/logs/catalina.out ${JVM_BASE}/logs/catalina.out_`date +%d%m%y`
+echo "Starting the ${JVM_BASE}" >> ${JVM_BASE}/logs/deployment.log
+nohup ${JVM_BASE}/bin/startup.sh >> ${JVM_BASE}/logs/deployment.log
+echo "Capturing build details" > ${JVM_BASE}/logs/build.out
+OLD_VER=`cat ${BKP_DIR}/${BLD_NAME}/version.txt | grep Bamboo-Build | awk -F ':' '{print $2}'`
+NEW_VER=`cat ${WEBAPPS_PATH}/${BLD_NAME}/version.txt | grep Bamboo-Build | awk -F ':' '{print $2}'`
+echo "OLD_VER : " ${OLD_VER} >> ${JVM_BASE}/logs/build.out
+echo "NEW_VER : " ${NEW_VER} >> ${JVM_BASE}/logs/build.out
+fi
+
