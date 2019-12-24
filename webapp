@@ -1,6 +1,6 @@
 #!/bin/bash
 #Name   :       Script for Auto Deploying CSR, Admin & Branch Report thro Ansible
-#Author :       Sureshkumar H
+#Author :       Rajib 
 if [ -z ${1} ]
    then
     echo "No Input, hence exiting"
